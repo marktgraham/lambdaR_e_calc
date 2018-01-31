@@ -4,10 +4,28 @@ import numpy as np
 import matplotlib.pyplot as plt
 from cap_display_pixels import display_pixels
 import matplotlib.patches as patches
-from matplotlib import cm
 
-def lambda_r_calc(xpix, ypix, flux, vel_pix, disp_pix, eff_rad, ellip, phot_ang,
-                  sig_psf=0, n=2, sigma_e=False, plot=False, vmin=None, vmax=None, dmin=None, dmax=None):
+'''
+    Copyright (C) 2018, Mark T. Graham
+    E-mail: mark.graham@physics.ox.ac.uk
+    
+    If you have found this software useful for your research,
+    I would appreciate a citation for Graham et al (2018).
+
+    See example at the bottom for usage instructions.
+    
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
+    INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
+    PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT 
+    HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION 
+    OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE 
+    SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+'''
+
+
+def lambdaR_e_calc(xpix, ypix, flux, vel_pix, disp_pix, eff_rad, ellip, phot_ang,
+                  sig_psf=0., n=2., sigma_e=False, plot=False, vmin=None, vmax=None, dmin=None, dmax=None):
     '''
     Given 2D kinematic data, this routine calculates a value for the luminosity-weighted
     stellar angular momentum parameter lambdaR within one effective radius
@@ -23,6 +41,8 @@ def lambda_r_calc(xpix, ypix, flux, vel_pix, disp_pix, eff_rad, ellip, phot_ang,
     *   eff_rad:    Circular effective radius in arcsec.
     *   ellip:      Ellipticity of the half-light ellipse = 1 - axis ratio.
     *   phot_ang:   Photometric major axis East of North (E = 90 degrees = 9 o'clock on the sky).
+
+    Optional:
     *   sigma_e:    If True, will calculate the effective velocity dispersion within the half-light ellipse
                     (see Equation (3) from G18).
 
@@ -58,6 +78,7 @@ def lambda_r_calc(xpix, ypix, flux, vel_pix, disp_pix, eff_rad, ellip, phot_ang,
     *   error:      Returns the error calculated using the equations given in Figure C4 of G18.
     *   frac:       Returns the fraction of pixels within the half-light ellipse with disp_pix = 0
                     (See Subsection 3.6 and Appendix B of G18).
+    *   sigma_e:    If sigma_e option is True, then sigma_e is returned.
 
     '''
 
@@ -92,10 +113,10 @@ def lambda_r_calc(xpix, ypix, flux, vel_pix, disp_pix, eff_rad, ellip, phot_ang,
         print('Check that input sizes match: all quantities should have sizes equal to the number of pixels')
 
     try:
-        lambdaR = np.around(sum(num)/sum(denom), 4)
+        lambdaR = np.around(sum(num)/sum(denom), 3)
     except ZeroDivisionError:
         print('Denominator == 0')
-        lambdaR = np.nan
+        lambdaR = -999.
 
     # Measure fraction of pixels with sigma=0
     try:
@@ -114,12 +135,12 @@ def lambda_r_calc(xpix, ypix, flux, vel_pix, disp_pix, eff_rad, ellip, phot_ang,
         print('Sersic index is outside the range 0.5 < n < 6.5: not correcting')
 
     # Equation 5, G18
-    lambdaR_true = np.around(lambdaR * (1 + (n - 2) * (0.26 * sig_psf_re_ratio)) * (1 + (sig_psf_re_ratio / 0.47) ** 1.76) ** 0.84, 4)
+    lambdaR_true = np.around(lambdaR * (1 + (n - 2) * (0.26 * sig_psf_re_ratio)) * (1 + (sig_psf_re_ratio / 0.47) ** 1.76) ** 0.84, 3)
 
     if lambdaR_true > 1:
         print('Warning: corrected value of lambdaR_e is greater than 1')
 
-    error = [0.03*sig_psf_re_ratio, -0.08*n*sig_psf_re_ratio]           # Figure C4, G18
+    error = np.around([-0.08*n*sig_psf_re_ratio, 0.03*sig_psf_re_ratio], 3)           # Figure C4, G18
 
     if lambdaR_true + error[1] < lambdaR:
         error[1] = lambdaR - lambdaR_true
@@ -138,7 +159,7 @@ def lambda_r_calc(xpix, ypix, flux, vel_pix, disp_pix, eff_rad, ellip, phot_ang,
             sigma_e = "{0:.1f}".format(np.sqrt(sum(num)/sum(denom)))
         except ZeroDivisionError:
             print('Denominator == 0')
-            sigma_e = np.nan
+            sigma_e = -999
 
     if plot:
         # Plot velocity, velocity dispersion and flux
@@ -226,14 +247,8 @@ def lambda_r_calc(xpix, ypix, flux, vel_pix, disp_pix, eff_rad, ellip, phot_ang,
     else:
         return lambdaR, error, frac
 
-def test_lambda_r_calc():
-    reff_final, eps, astro_pa, n, psf = 8.33, 0.124, 94.7, 4.812, 1.058
 
-    lambdar = lambda_r_calc(xpix[g], ypix[g], flux[g], vel_pix[g], disp_pix[g], reff_final, eps, astro_pa, plot=True)
-    lambdar = lambda_r_calc(xpix[g], ypix[g], flux[g], vel_pix[g], disp_pix[g], reff_final, eps, astro_pa, n=n, sig_psf=psf, plot=True)
-
-
-def lambda_r_calc_beam_corrected(lam_obs, semi_maj_axis, sig_psf, n, plot=False):
+def lambdaR_e_correct(lam_obs, semi_maj_axis, sig_psf, n, plot=False):
     '''
     Given observed values of lambda_r_e and the ratio between sigma_PSF and the semi-major axis,
     the function returns the corrected values of lambdaR_e. Accepts single values or arrays.
@@ -246,6 +261,8 @@ def lambda_r_calc_beam_corrected(lam_obs, semi_maj_axis, sig_psf, n, plot=False)
 
     Returns:
     *   lam_true:       Array/single value of corrected lambdaR_e.
+    *   error_low:      The error in the negative direction.
+    *   error_high:     The error in the positive direction.
 
     Plotting:
     If plot=True, the routine plots a graphic visualising the shift in lambdaR_e due to the correction.
@@ -253,12 +270,12 @@ def lambda_r_calc_beam_corrected(lam_obs, semi_maj_axis, sig_psf, n, plot=False)
 
     '''
 
+    if (np.min(n) < 0.5) | (np.max(n) > 6.5):
+        print('Sersic index contains values outside the range 0.5 < n < 6.5')
+
     sig_psf_re_ratio = sig_psf/semi_maj_axis
 
-    lam_true = np.around(lam_obs * (1 + (n - 2) * (0.26 * sig_psf_re_ratio)) * (1 + (sig_psf_re_ratio / 0.47) ** 1.76) ** 0.84, 4)
-
-    error_low = -0.08*n*sig_psf_re_ratio
-    error_high = 0.03*sig_psf_re_ratio
+    lam_true = np.around(lam_obs * (1 + (n - 2) * (0.26 * sig_psf_re_ratio)) * (1 + (sig_psf_re_ratio / 0.47) ** 1.76) ** 0.84, 3)
 
     w, w1, w2 = (sig_psf_re_ratio <= 1) & (lam_true <= 1), sig_psf_re_ratio > 1, lam_true > 1
 
@@ -297,11 +314,13 @@ def lambda_r_calc_beam_corrected(lam_obs, semi_maj_axis, sig_psf, n, plot=False)
         lam_true[w1] = lam_obs[w1]
         error_low = np.zeros_like(lam_true)
         error_high = np.zeros_like(lam_true)
-        error_low[~w1] = np.around(-0.08*n[~w1]*sig_psf_re_ratio[~w1], 4)
-        error_high[~w1] = np.around(0.03*sig_psf_re_ratio[~w1], 4)
+        error_low[~w1] = -0.08*n[~w1]*sig_psf_re_ratio[~w1]
+        error_high[~w1] = 0.03*sig_psf_re_ratio[~w1]
 
         w = lam_true + error_low < lam_obs
         error_low[w] = lam_obs[w] - lam_true[w]
+
+        return np.around(lam_true, 3), np.around(error_low, 3), np.around(error_high, 3)
 
     if isinstance(lam_obs, type(np.float(0))):
         if w1:
@@ -309,21 +328,31 @@ def lambda_r_calc_beam_corrected(lam_obs, semi_maj_axis, sig_psf, n, plot=False)
             lam_true = lam_obs
             error_low, error_high = 0, 0
         else:
-            error_low = np.round(-0.08 * n * sig_psf_re_ratio)
-            error_high = np.round(0.03 * sig_psf_re_ratio)
+            error_low = -0.08 * n * sig_psf_re_ratio
+            error_high = 0.03 * sig_psf_re_ratio
 
             if lam_true + error_low < lam_obs:
                 error_low = lam_obs - lam_true
 
-    return lam_true, error_low, error_high
+        return float('%.4f' % lam_true), float('%.4f' % error_low), float('%.4f' % error_high),
 
 
-def test_lambda_r_calc_beam_corrected(sma=10, lambda_reg=0.5):
-    lam_0 = lambda_r_calc_beam_corrected(0.2, sma, 0, 2)
+def test_lambdaR_e_calc():
+    xpix, ypix, flux, vel_pix, disp_pix = np.genfromtxt('../../Publications (LaTeX)/MG Paper I/7957-6103.txt').T
+
+    reff_final, eps, astro_pa, n, psf = 8.33, 0.124, 94.7, 4.812, 1.058     # Taken from Table 2. of G18 for 7957-6103
+
+    lambdaR_e_calc(xpix, ypix, flux, vel_pix, disp_pix, reff_final, eps, astro_pa, plot=True)
+    lambdaR_e_calc(xpix, ypix, flux, vel_pix, disp_pix, reff_final, eps, astro_pa, n=n, sig_psf=psf, plot=True)
+    plt.show()
+
+
+def test_lambdaR_e_correct(sma=10, lambda_reg=0.5):
+    lam_0 = lambdaR_e_correct(0.1, sma, 0, 2)
 
     sersic_array = np.linspace(1, 6, 6)
 
-    lam_1 = lambda_r_calc_beam_corrected(lam_obs=np.full_like(sersic_array, lambda_reg),
+    lam_1 = lambdaR_e_correct(lam_obs=np.full_like(sersic_array, lambda_reg),
                                          semi_maj_axis=np.full_like(sersic_array, sma),
                                          sig_psf=np.full_like(sersic_array, 2.5 / 2.355),
                                          n=sersic_array)
@@ -331,12 +360,12 @@ def test_lambda_r_calc_beam_corrected(sma=10, lambda_reg=0.5):
     lam_1_error_low = lam_1[1]
     lam_1_error_high = lam_1[2]
 
-    lam_2 = lambda_r_calc_beam_corrected(lambda_reg, 1, 2.5 / 2.355, 3)
+    lam_2 = lambdaR_e_correct(lambda_reg, 1, 2.5 / 2.355, 3)
 
     print('Semi-major axis = %.1f"' % sma)
     print('Non-Regular Slow Rotator (no correction required): lambda_obs=0.1, SMA=%.1f"' % sma)
     print('lambda_true = %s, error = [%s, %s]' % (lam_0[0], lam_0[1], lam_0[2]))
-    print('#####')
+    print('###########################################################################')
     print('Effect of Sersic Index:')
     print('Regular Fast Rotator: lambda_obs = %s, SMA=%s", FWHM=2.5"' % (lambda_reg, sma))
     print('###########################################################################')
@@ -361,3 +390,10 @@ def test_lambda_r_calc_beam_corrected(sma=10, lambda_reg=0.5):
     print('Regular Fast Rotator where SMA < sig_PSF: lambda_obs = %s, SMA=1", FWHM=2.5", n=3' % lambda_reg)
     print('lambda_true = %s, error = [%s, %s]' % (lam_2[0], lam_2[1], lam_2[2]))
     plt.show()
+
+
+if __name__ == '__main__':
+
+    test_lambdaR_e_calc()
+
+    test_lambdaR_e_correct()
